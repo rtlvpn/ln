@@ -221,12 +221,21 @@ async function fetchData(timeframe) {
     try {
         // Fetch data code...
         
-        // Calculate prediction data
-        const predictionData = calculatePricePrediction(
-            heatmapData, 
-            candlestickData,
-            parseInt(document.getElementById('pathCount').value) || 4
-        );
+        // Check if high performance mode is enabled
+        const highPerformanceMode = document.getElementById('highPerformanceMode').checked;
+        
+        // Use the optimized p5.js version when high performance mode is on
+        const predictionData = highPerformanceMode ? 
+            calculatePricePredictionP5(
+                heatmapData, 
+                candlestickData,
+                parseInt(document.getElementById('pathCount').value) || 4
+            ) : 
+            calculatePricePrediction(
+                heatmapData, 
+                candlestickData,
+                parseInt(document.getElementById('pathCount').value) || 4
+            );
         
         // Cache all data for reuse
         window.cachedCandlestickData = candlestickData;
