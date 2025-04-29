@@ -1,7 +1,7 @@
 // Physics-inspired prediction model functions
 
 // Master function to calculate price prediction
-function calculatePricePrediction(heatmapData, candlestickData, pathCount = 4) {
+function calculatePricePrediction(heatmapData, candlestickData, pathCount = 10) {
     // Return object with prediction results
     const result = {
         timestamps: [],
@@ -18,21 +18,35 @@ function calculatePricePrediction(heatmapData, candlestickData, pathCount = 4) {
     // 1. Calculate refractive indices based on order density
     const refractiveIndices = calculateRefractiveIndices(heatmapData);
     
-    // 2. Define multiple entry points based on path count
+    // 2. Define multiple entry points with proper separation
     const entryPoints = determineEntryPoints(heatmapData, candlestickData, pathCount);
     
+    // Track all generated paths to handle repulsion
+    const allPaths = [];
     let lastResistanceMap = null;
     
-    // 3. For each entry point, calculate a separate path and momentum vectors
-    for (const entryPoint of entryPoints) {
+    // 3. For each entry point, calculate a separate path with awareness of other paths
+    for (let i = 0; i < entryPoints.length; i++) {
+        const entryPoint = entryPoints[i];
+        
         // Find price path of least resistance from this entry point
-        const optimalPath = findOptimalPricePath(heatmapData, refractiveIndices, candlestickData, entryPoint);
+        const optimalPath = findOptimalPricePath(
+            heatmapData, 
+            refractiveIndices, 
+            candlestickData, 
+            entryPoint,
+            allPaths,   // Pass all paths generated so far
+            i           // Current path index
+        );
+        
+        // Store the path for future path calculations
+        allPaths.push(optimalPath.path);
         
         // Store the last resistance map
         lastResistanceMap = optimalPath.resistanceMap;
         
         // Calculate optical momentum and predict future movement
-        const prediction = calculateOpticalMomentum(optimalPath, refractiveIndices, heatmapData);
+    const prediction = calculateOpticalMomentum(optimalPath, refractiveIndices, heatmapData);
         
         // Add to the collections
         result.predictedPaths.push(optimalPath.path);
@@ -80,8 +94,100 @@ function calculateRefractiveIndices(heatmapData) {
     return refractiveIndices;
 }
 
-// Find optimal path for price movement based on physics principles
-function findOptimalPricePath(heatmapData, refractiveIndices, candlestickData, entryPoint = null) {
+// New function to determine multiple entry points with guaranteed separation
+function determineEntryPoints(heatmapData, candlestickData, pathCount = 10) {
+    const priceLevels = heatmapData.priceLevels;
+    const entryPoints = [];
+    
+    // Find price range
+    const minPrice = Math.min(...priceLevels);
+    const maxPrice = Math.max(...priceLevels);
+    const priceRange = maxPrice - minPrice;
+    
+    // Ensure minimum separation between entry points (in price level indices)
+    const minSeparation = Math.max(1, Math.floor(priceLevels.length / (pathCount * 1.5)));
+    
+    // Generate evenly spaced entry points first
+    for (let i = 0; i < pathCount; i++) {
+        // Create an even distribution across the full price range
+        const price = minPrice + (priceRange * i / (pathCount - 1 || 1));
+        const index = findClosestPriceIndex(priceLevels, price);
+        
+        entryPoints.push({
+            price: price,
+            index: index,
+            timeIndex: 0
+        });
+    }
+    
+    // Ensure minimum separation by applying repulsion forces
+    let hasAdjusted = true;
+    const maxIterations = 20; // Prevent infinite loops
+    let iteration = 0;
+    
+    while (hasAdjusted && iteration < maxIterations) {
+        hasAdjusted = false;
+        iteration++;
+        
+        // Apply repulsion forces between points
+        for (let i = 0; i < entryPoints.length; i++) {
+            for (let j = i + 1; j < entryPoints.length; j++) {
+                const indexDiff = Math.abs(entryPoints[i].index - entryPoints[j].index);
+                
+                if (indexDiff < minSeparation) {
+                    // Points are too close, apply repulsion
+                    hasAdjusted = true;
+                    
+                    // Calculate repulsion force (stronger when closer)
+                    const force = (minSeparation - indexDiff) / minSeparation;
+                    const forceDirection = entryPoints[i].index < entryPoints[j].index ? -1 : 1;
+                    
+                    // Apply force to both points in opposite directions
+                    const adjustment = Math.ceil(force * minSeparation * 0.5);
+                    
+                    // Move points apart while keeping within bounds
+                    entryPoints[i].index = Math.max(0, Math.min(
+                        priceLevels.length - 1, 
+                        entryPoints[i].index + (forceDirection * adjustment)
+                    ));
+                    
+                    entryPoints[j].index = Math.max(0, Math.min(
+                        priceLevels.length - 1, 
+                        entryPoints[j].index - (forceDirection * adjustment)
+                    ));
+                    
+                    // Update prices to match new indices
+                    entryPoints[i].price = priceLevels[entryPoints[i].index];
+                    entryPoints[j].price = priceLevels[entryPoints[j].index];
+                }
+            }
+        }
+    }
+    
+    // Ensure the actual market price is included
+    const firstPrice = candlestickData[0].close;
+    const firstPriceIndex = findClosestPriceIndex(priceLevels, firstPrice);
+    
+    // Check if we already have a path close to the market price
+    const hasMarketPrice = entryPoints.some(ep => 
+        Math.abs(ep.index - firstPriceIndex) <= minSeparation
+    );
+    
+    if (!hasMarketPrice) {
+        // Replace the middle entry point with the market price
+        const midIndex = Math.floor(entryPoints.length / 2);
+        entryPoints[midIndex] = {
+            price: firstPrice,
+            index: firstPriceIndex,
+            timeIndex: 0
+        };
+    }
+    
+    return entryPoints;
+}
+
+// Modified optimal path function to prevent path crossing
+function findOptimalPricePath(heatmapData, refractiveIndices, candlestickData, entryPoint = null, allPaths = [], pathIndex = -1) {
     const priceLevels = heatmapData.priceLevels;
     const timestamps = heatmapData.timestamps;
     const path = [];
@@ -105,7 +211,7 @@ function findOptimalPricePath(heatmapData, refractiveIndices, candlestickData, e
     if (entryPoint) {
         currentPriceIndex = entryPoint.index;
     } else {
-        const startPrice = candlestickData[0].close;
+    const startPrice = candlestickData[0].close;
         currentPriceIndex = findClosestPriceIndex(priceLevels, startPrice);
     }
     
@@ -183,12 +289,44 @@ function findOptimalPricePath(heatmapData, refractiveIndices, candlestickData, e
                 resistanceMap[i][j].gradientUp * 0.1 : 
                 resistanceMap[i][j].gradientDown * 0.1;
             
+            // 5. NEW: Path repulsion to prevent crossing/overlapping
+            let repulsionEffect = 0;
+            
+            // Check distance to all other existing paths at this timestamp
+            if (allPaths.length > 0 && pathIndex >= 0) {
+                const pathRepulsionDistance = Math.max(1, Math.floor(priceLevels.length / (allPaths.length * 3)));
+                
+                for (let p = 0; p < allPaths.length; p++) {
+                    // Skip comparing to self
+                    if (p === pathIndex) continue;
+                    
+                    // Find this path's point at current timestamp
+                    const otherPath = allPaths[p];
+                    const otherTimePoints = otherPath.filter(pt => 
+                        pt.time.getTime() === new Date(timestamps[i] * 1000).getTime()
+                    );
+                    
+                    if (otherTimePoints.length > 0) {
+                        const otherPoint = otherTimePoints[0];
+                        const otherPriceIndex = findClosestPriceIndex(priceLevels, otherPoint.price);
+                        const distance = Math.abs(j - otherPriceIndex);
+                        
+                        // If too close, add repulsion (stronger when closer)
+                        if (distance < pathRepulsionDistance) {
+                            const repulsionForce = (pathRepulsionDistance - distance) / pathRepulsionDistance;
+                            repulsionEffect += repulsionForce * 0.4; // Adjust strength factor as needed
+                        }
+                    }
+                }
+            }
+            
             // Total resistance for this path option
             const totalResistance = 
                 opticalResistance + 
                 bendPenalty + 
                 actualPriceAttraction + 
-                gradientEffect;
+                gradientEffect + 
+                repulsionEffect;
             
             // Update minimum resistance path
             if (totalResistance < minResistance) {
@@ -311,48 +449,6 @@ function calculateOpticalMomentum(optimalPath, refractiveIndices, heatmapData) {
     }
     
     return { momentumVectors, confidenceScores };
-}
-
-// New function to determine multiple entry points
-function determineEntryPoints(heatmapData, candlestickData, pathCount = 4) {
-    const priceLevels = heatmapData.priceLevels;
-    const entryPoints = [];
-    
-    // Include the original entry point (first price)
-    const firstPrice = candlestickData[0].close;
-    entryPoints.push({
-        price: firstPrice,
-        index: findClosestPriceIndex(priceLevels, firstPrice),
-        timeIndex: 0
-    });
-    
-    // If only one path is requested, return just the original entry point
-    if (pathCount <= 1) {
-        return entryPoints;
-    }
-    
-    // Add additional entry points
-    const minPrice = Math.min(...priceLevels);
-    const maxPrice = Math.max(...priceLevels);
-    const priceRange = maxPrice - minPrice;
-    
-    // Calculate how many more entry points we need
-    const additionalPoints = pathCount - 1;
-    
-    // Create evenly distributed price points
-    for (let i = 1; i <= additionalPoints; i++) {
-        // Calculate percentage position for evenly distributed points
-        const percent = i / (additionalPoints + 1);
-        const price = minPrice + (priceRange * percent);
-        
-        entryPoints.push({
-            price: price,
-            index: findClosestPriceIndex(priceLevels, price),
-            timeIndex: 0
-        });
-    }
-    
-    return entryPoints;
 }
 
 // Function to calculate price volatility for search radius

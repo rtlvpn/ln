@@ -103,6 +103,28 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // High performance mode toggle
+    const highPerformanceToggle = document.getElementById('highPerformanceMode');
+    if (highPerformanceToggle) {
+        highPerformanceToggle.addEventListener('change', function() {
+            if (window.cachedCandlestickData && window.cachedHeatmapData && window.cachedPredictionData) {
+                // Only re-render the simulation chart
+                renderSimulationChart(window.cachedHeatmapData, window.cachedPredictionData);
+            }
+        });
+    }
+    
+    // Add event listener for the main chart predictions toggle
+    const mainChartPredictionsToggle = document.getElementById('showPredictionsOnMain');
+    if (mainChartPredictionsToggle) {
+        mainChartPredictionsToggle.addEventListener('change', function() {
+            if (window.cachedCandlestickData && window.cachedHeatmapData) {
+                // Re-render the full chart to apply the setting
+                renderChart(window.cachedCandlestickData, window.cachedHeatmapData);
+            }
+        });
+    }
 });
 
 // Function to load data from API
