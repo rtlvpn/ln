@@ -70,6 +70,26 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Auto refresh every 120 seconds (2 minutes)
     setInterval(() => loadData(false), 120000);
+    
+    // Set up event listener for the path count slider
+    const pathCountSlider = document.getElementById('pathCount');
+    const pathCountValue = document.getElementById('pathCountValue');
+    
+    if (pathCountSlider && pathCountValue) {
+        // Update the displayed value when slider changes
+        pathCountSlider.addEventListener('input', function() {
+            pathCountValue.textContent = this.value;
+        });
+        
+        // Re-render the chart when the slider value is changed and released
+        pathCountSlider.addEventListener('change', function() {
+            // Check if we have data cached
+            if (window.cachedCandlestickData && window.cachedCandlestickData.length && 
+                window.cachedHeatmapData && window.cachedHeatmapData.timestamps.length) {
+                renderChart(window.cachedCandlestickData, window.cachedHeatmapData);
+            }
+        });
+    }
 });
 
 // Function to load data from API
@@ -159,4 +179,20 @@ function loadData(fullRefresh = false) {
         console.error('Error fetching data:', error);
         chartElement.innerHTML = '<div style="text-align: center; padding: 20px; color: red;">Failed to load data. Please try again.</div>';
     });
+}
+
+// Make sure to cache the data when fetching
+async function fetchData(timeframe) {
+    try {
+        // Fetch data code...
+        
+        // Cache the data for reuse
+        window.cachedCandlestickData = candlestickData;
+        window.cachedHeatmapData = heatmapData;
+        
+        // Render the chart
+        renderChart(candlestickData, heatmapData);
+    } catch (error) {
+        console.error('Error fetching data:', error);
+    }
 } 

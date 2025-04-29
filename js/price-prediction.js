@@ -1,38 +1,50 @@
 // Physics-inspired prediction model functions
 
 // Master function to calculate price prediction
-function calculatePricePrediction(heatmapData, candlestickData) {
+function calculatePricePrediction(heatmapData, candlestickData, pathCount = 4) {
     // Return object with prediction results
     const result = {
         timestamps: [],
         actualPrice: [],
-        predictedPath: [],
+        predictedPaths: [],
         refractiveIndices: [],
         resistanceMap: [],
-        momentumVectors: [],
-        confidenceScores: []
+        momentumVectorsCollection: [],
+        confidenceScoresCollection: []
     };
     
     if (!heatmapData.heatmap.length || !candlestickData.length) return result;
     
     // 1. Calculate refractive indices based on order density
-    // Higher density = higher refractive index = slower light passage (more resistance)
     const refractiveIndices = calculateRefractiveIndices(heatmapData);
     
-    // 2. Find price path of least resistance
-    const optimalPath = findOptimalPricePath(heatmapData, refractiveIndices, candlestickData);
+    // 2. Define multiple entry points based on path count
+    const entryPoints = determineEntryPoints(heatmapData, candlestickData, pathCount);
     
-    // 3. Calculate optical momentum and predict future movement
-    const prediction = calculateOpticalMomentum(optimalPath, refractiveIndices, heatmapData);
+    let lastResistanceMap = null;
     
-    // 4. Populate result with prediction data
+    // 3. For each entry point, calculate a separate path and momentum vectors
+    for (const entryPoint of entryPoints) {
+        // Find price path of least resistance from this entry point
+        const optimalPath = findOptimalPricePath(heatmapData, refractiveIndices, candlestickData, entryPoint);
+        
+        // Store the last resistance map
+        lastResistanceMap = optimalPath.resistanceMap;
+        
+        // Calculate optical momentum and predict future movement
+        const prediction = calculateOpticalMomentum(optimalPath, refractiveIndices, heatmapData);
+        
+        // Add to the collections
+        result.predictedPaths.push(optimalPath.path);
+        result.momentumVectorsCollection.push(prediction.momentumVectors);
+        result.confidenceScoresCollection.push(prediction.confidenceScores);
+    }
+    
+    // 4. Populate result with shared data
     result.timestamps = heatmapData.timestamps.map(ts => new Date(ts * 1000));
     result.actualPrice = candlestickData.map(c => c.close);
-    result.predictedPath = optimalPath.path;
     result.refractiveIndices = refractiveIndices;
-    result.resistanceMap = optimalPath.resistanceMap;
-    result.momentumVectors = prediction.momentumVectors;
-    result.confidenceScores = prediction.confidenceScores;
+    result.resistanceMap = lastResistanceMap;
     
     return result;
 }
@@ -69,7 +81,7 @@ function calculateRefractiveIndices(heatmapData) {
 }
 
 // Find optimal path for price movement based on physics principles
-function findOptimalPricePath(heatmapData, refractiveIndices, candlestickData) {
+function findOptimalPricePath(heatmapData, refractiveIndices, candlestickData, entryPoint = null) {
     const priceLevels = heatmapData.priceLevels;
     const timestamps = heatmapData.timestamps;
     const path = [];
@@ -80,14 +92,27 @@ function findOptimalPricePath(heatmapData, refractiveIndices, candlestickData) {
         return { path, resistanceMap };
     }
     
-    // Initialize with actual price at first timestamp
-    const startPrice = candlestickData[0].close;
-    let currentPriceIndex = findClosestPriceIndex(priceLevels, startPrice);
+    // IMPORTANT: Calculate volatility and search radius BEFORE any usage
+    // Variable search radius based on price volatility
+    const priceHistory = candlestickData.map(c => c.close);
+    const volatility = calculateVolatility(priceHistory);
+    const baseSearchRadius = Math.max(2, Math.floor(priceLevels.length * volatility * 0.2));
+    
+    // Initialize with specified entry point price or default to first price
+    let startTimeIndex = entryPoint ? (entryPoint.timeIndex || 0) : 0;
+    let currentPriceIndex;
+    
+    if (entryPoint) {
+        currentPriceIndex = entryPoint.index;
+    } else {
+        const startPrice = candlestickData[0].close;
+        currentPriceIndex = findClosestPriceIndex(priceLevels, startPrice);
+    }
     
     path.push({ 
-        time: new Date(timestamps[0] * 1000), 
+        time: new Date(timestamps[startTimeIndex] * 1000), 
         price: priceLevels[currentPriceIndex],
-        resistance: refractiveIndices[0][currentPriceIndex]
+        resistance: refractiveIndices[startTimeIndex][currentPriceIndex]
     });
     
     // Calculate gradient of refractive indices (important for Snell's law)
@@ -116,16 +141,8 @@ function findOptimalPricePath(heatmapData, refractiveIndices, candlestickData) {
         resistanceMap.push(timeResistance);
     }
     
-    // Apply Fermat's principle of least time
-    // This is analogous to finding path of least resistance through a medium
-    
-    // Variable search radius based on price volatility
-    const priceHistory = candlestickData.map(c => c.close);
-    const volatility = calculateVolatility(priceHistory);
-    const baseSearchRadius = Math.max(2, Math.floor(priceLevels.length * volatility * 0.2));
-    
     // For each timestamp, find the next point on the path
-    for (let i = 1; i < timestamps.length; i++) {
+    for (let i = startTimeIndex + 1; i < timestamps.length; i++) {
         // Find the actual price at this timestamp if available
         const actualPriceIndex = i < candlestickData.length ? 
             findClosestPriceIndex(priceLevels, candlestickData[i].close) : -1;
@@ -294,4 +311,70 @@ function calculateOpticalMomentum(optimalPath, refractiveIndices, heatmapData) {
     }
     
     return { momentumVectors, confidenceScores };
+}
+
+// New function to determine multiple entry points
+function determineEntryPoints(heatmapData, candlestickData, pathCount = 4) {
+    const priceLevels = heatmapData.priceLevels;
+    const entryPoints = [];
+    
+    // Include the original entry point (first price)
+    const firstPrice = candlestickData[0].close;
+    entryPoints.push({
+        price: firstPrice,
+        index: findClosestPriceIndex(priceLevels, firstPrice),
+        timeIndex: 0
+    });
+    
+    // If only one path is requested, return just the original entry point
+    if (pathCount <= 1) {
+        return entryPoints;
+    }
+    
+    // Add additional entry points
+    const minPrice = Math.min(...priceLevels);
+    const maxPrice = Math.max(...priceLevels);
+    const priceRange = maxPrice - minPrice;
+    
+    // Calculate how many more entry points we need
+    const additionalPoints = pathCount - 1;
+    
+    // Create evenly distributed price points
+    for (let i = 1; i <= additionalPoints; i++) {
+        // Calculate percentage position for evenly distributed points
+        const percent = i / (additionalPoints + 1);
+        const price = minPrice + (priceRange * percent);
+        
+        entryPoints.push({
+            price: price,
+            index: findClosestPriceIndex(priceLevels, price),
+            timeIndex: 0
+        });
+    }
+    
+    return entryPoints;
+}
+
+// Function to calculate price volatility for search radius
+function calculateVolatility(priceHistory) {
+    if (!priceHistory || priceHistory.length < 2) return 0.05; // Default volatility
+    
+    // Calculate percentage changes
+    const changes = [];
+    for (let i = 1; i < priceHistory.length; i++) {
+        if (priceHistory[i-1] !== 0) {
+            const percentChange = Math.abs((priceHistory[i] - priceHistory[i-1]) / priceHistory[i-1]);
+            changes.push(percentChange);
+        }
+    }
+    
+    // Calculate standard deviation of changes
+    if (changes.length === 0) return 0.05;
+    
+    const mean = changes.reduce((sum, value) => sum + value, 0) / changes.length;
+    const variance = changes.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / changes.length;
+    const stdDev = Math.sqrt(variance);
+    
+    // Return standard deviation, clamped to reasonable range
+    return Math.max(0.01, Math.min(0.5, stdDev));
 } 

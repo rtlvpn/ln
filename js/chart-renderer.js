@@ -1,6 +1,9 @@
 // Chart rendering functions
 
 function renderChart(candlestickData, heatmapData) {
+    // Get the current path count from the UI
+    const pathCount = parseInt(document.getElementById('pathCount').value) || 4;
+    
     if (!candlestickData.length || !heatmapData.timestamps.length) {
         document.getElementById('chart').innerHTML = 'No data available for the selected time range';
         return;
@@ -9,8 +12,8 @@ function renderChart(candlestickData, heatmapData) {
     // Calculate Order Book Momentum
     const obmData = calculateOBM(heatmapData);
     
-    // Calculate physics-based price prediction
-    const predictionData = calculatePricePrediction(heatmapData, candlestickData);
+    // Calculate physics-based price prediction with path count
+    const predictionData = calculatePricePrediction(heatmapData, candlestickData, pathCount);
     
     // Prepare price data
     const times = candlestickData.map(item => new Date(item.timestamp));
@@ -635,27 +638,49 @@ function renderChart(candlestickData, heatmapData) {
     }
 
     // After creating the main chart, add the physics-based prediction
-    if (predictionData.predictedPath.length > 0) {
-        // Add prediction trace to the main chart with improved styling
+    if (predictionData.predictedPaths && predictionData.predictedPaths.length > 0) {
+        // Define a color palette for different paths
+        const pathColors = [
+            { line: 'rgba(255, 215, 0, 0.9)', arrow: 'rgba(255, 150, 0, ' },    // Gold/Orange
+            { line: 'rgba(50, 200, 255, 0.9)', arrow: 'rgba(0, 150, 255, ' },   // Blue
+            { line: 'rgba(255, 100, 255, 0.9)', arrow: 'rgba(255, 50, 255, ' }, // Pink/Purple
+            { line: 'rgba(100, 255, 100, 0.9)', arrow: 'rgba(0, 200, 0, ' },    // Green
+            { line: 'rgba(255, 255, 100, 0.9)', arrow: 'rgba(200, 200, 0, ' },  // Yellow
+            { line: 'rgba(255, 150, 150, 0.9)', arrow: 'rgba(255, 100, 100, ' }, // Light Red
+            { line: 'rgba(150, 255, 255, 0.9)', arrow: 'rgba(100, 200, 200, ' }, // Cyan
+            { line: 'rgba(200, 200, 200, 0.9)', arrow: 'rgba(150, 150, 150, ' }, // Gray
+            { line: 'rgba(150, 150, 255, 0.9)', arrow: 'rgba(100, 100, 200, ' }, // Lavender
+            { line: 'rgba(255, 200, 150, 0.9)', arrow: 'rgba(255, 150, 100, ' }  // Peach
+        ];
+        
+        // Collect all annotations to add them all at once at the end
+        let allAnnotations = [];
+        
+        // For each predicted path, add a trace with a different color
+        predictionData.predictedPaths.forEach((pathData, pathIndex) => {
+            // Get color for this path (cycle through colors if needed)
+            const colorSet = pathColors[pathIndex % pathColors.length];
+            
+            // Add prediction trace to the main chart with unique styling
         const predictionTrace = {
-            x: predictionData.predictedPath.map(p => p.time),
-            y: predictionData.predictedPath.map(p => p.price),
+                x: pathData.map(p => p.time),
+                y: pathData.map(p => p.price),
             type: 'scatter',
             mode: 'lines',
-            name: 'Optical Path',
+                name: `Optical Path ${pathIndex + 1}`,
             line: {
                 shape: 'spline',
-                color: 'rgba(255, 215, 0, 0.9)', // Brighter gold color
+                    color: colorSet.line,
                 width: 3,
-                dash: 'solid' // Change from dotted to solid for better visibility
+                    dash: 'solid'
             },
             hoverinfo: 'text+x',
-            text: predictionData.predictedPath.map(p => 
-                `Price: ${p.price.toFixed(6)}<br>Resistance: ${p.resistance.toFixed(2)}`
+                text: pathData.map(p => 
+                    `Path ${pathIndex + 1}<br>Price: ${p.price.toFixed(6)}<br>Resistance: ${p.resistance.toFixed(2)}`
             ),
             hoverlabel: {
                 bgcolor: 'rgba(40, 40, 0, 0.9)',
-                bordercolor: 'rgba(255, 215, 0, 1)',
+                    bordercolor: colorSet.line,
                 font: {
                     family: 'Courier New, monospace',
                     size: 12,
@@ -664,43 +689,118 @@ function renderChart(candlestickData, heatmapData) {
             }
         };
         
-        // Add momentum vectors as annotations with better scaling
-        const annotations = [];
-        // Only add vectors for key points to avoid cluttering
-        const step = Math.max(1, Math.floor(predictionData.momentumVectors.length / 7));
-        
-        for (let i = 1; i < predictionData.momentumVectors.length - 1; i += step) {
-            const vector = predictionData.momentumVectors[i];
-            if (!vector || vector.magnitude === 0) continue;
+            // Add the prediction trace to the chart
+            Plotly.addTraces('chart', predictionTrace);
             
-            // Scale the vector dynamically based on the chart size
-            const scaleFactor = 0.02; // Smaller value for better proportions
-            const confidence = predictionData.confidenceScores[i-1] || 0.5;
+            // Add momentum vectors as annotations
+            // Get the momentum vectors for this path
+            const momentumVectors = predictionData.momentumVectorsCollection[pathIndex] || [];
+            const confidenceScores = predictionData.confidenceScoresCollection[pathIndex] || [];
+            
+            // Ensure we have enough vectors to work with
+            if (momentumVectors.length <= 1) {
+                return; // Skip to next path if not enough vectors
+            }
+            
+            // Constants for arrow display
+            const MIN_ARROWS_PER_PATH = 3; // Minimum number of arrows to display for each path
+            const MAX_ARROWS_PER_PATH = 7; // Maximum number to avoid cluttering
+            
+            // Calculate optimal step to show between MIN and MAX arrows
+            let step = Math.max(1, Math.floor(momentumVectors.length / MAX_ARROWS_PER_PATH));
+            
+            // Collect potential arrow positions
+            const potentialArrows = [];
+            
+            // First pass: collect potential arrow positions using step size
+            for (let i = 1; i < momentumVectors.length - 1; i += step) {
+                const vector = momentumVectors[i];
+                if (!vector) continue;
+                
+                // Skip truly zero magnitude vectors only (very small is ok)
+                if (vector.magnitude === 0) continue;
+                
+                potentialArrows.push({
+                    index: i,
+                    vector: vector,
+                    confidence: (i-1 < confidenceScores.length) ? confidenceScores[i-1] : 0.5,
+                    // Higher magnitude = higher priority
+                    priority: vector.magnitude
+                });
+            }
+            
+            // If we didn't get enough arrows from step-based selection,
+            // add more based on magnitude priority
+            if (potentialArrows.length < MIN_ARROWS_PER_PATH) {
+                // Add arrows from all available vectors, sorted by magnitude
+                const additionalArrows = [];
+                
+                for (let i = 1; i < momentumVectors.length - 1; i++) {
+                    // Skip indices we've already included
+                    if (potentialArrows.some(a => a.index === i)) continue;
+                    
+                    const vector = momentumVectors[i];
+                    if (!vector || vector.magnitude === 0) continue;
+                    
+                    additionalArrows.push({
+                        index: i,
+                        vector: vector,
+                        confidence: (i-1 < confidenceScores.length) ? confidenceScores[i-1] : 0.5,
+                        priority: vector.magnitude
+                    });
+                }
+                
+                // Sort by magnitude (highest first) and add until we reach minimum
+                additionalArrows.sort((a, b) => b.priority - a.priority);
+                
+                // Add until we reach MIN_ARROWS_PER_PATH (or run out)
+                let arrowsToAdd = Math.min(
+                    MIN_ARROWS_PER_PATH - potentialArrows.length,
+                    additionalArrows.length
+                );
+                
+                for (let i = 0; i < arrowsToAdd; i++) {
+                    potentialArrows.push(additionalArrows[i]);
+                }
+            }
+            
+            // Now create the actual arrows from our potential arrows collection
+            potentialArrows.forEach(arrowData => {
+                const vector = arrowData.vector;
+                const confidence = arrowData.confidence;
+                
+                // Scale the vector dynamically based on the chart size
+                const scaleFactor = 0.02;
             
             // Calculate arrow endpoint relative to vector direction
             const arrowLength = Math.min(0.02, vector.magnitude * scaleFactor);
             
-            annotations.push({
+                allAnnotations.push({
                 x: vector.x,
                 y: vector.y,
-                ax: vector.dx * arrowLength * 500000, // Large scaling for visibility
-                ay: vector.dy * arrowLength * 1000, // Reduced scaling for y to avoid extreme arrows
+                    ax: vector.dx * arrowLength * 500000,
+                    ay: vector.dy * arrowLength * 1000,
                 arrowhead: 2,
                 arrowsize: 1.5,
                 arrowwidth: 1.5 + confidence * 2,
-                arrowcolor: `rgba(255, ${Math.floor(255 * confidence)}, 0, ${0.5 + 0.5 * confidence})`,
+                    arrowcolor: `${colorSet.arrow}${0.5 + 0.5 * confidence})`,
                 showarrow: true,
                 xref: 'x',
-                yref: 'y'
+                    yref: 'y',
+                    // Add a label to differentiate paths
+                    text: `P${pathIndex+1}`,
+                    font: {
+                        color: colorSet.line,
+                        size: 9
+                    },
+                    textposition: 'top right'
+                });
             });
-        }
+        });
         
-        // Add the prediction trace to the chart
-        Plotly.addTraces('chart', predictionTrace);
-        
-        // Update the layout to include momentum vector annotations
+        // Update the layout to include all momentum vector annotations at once
         Plotly.relayout('chart', {
-            annotations: annotations
+            annotations: allAnnotations
         });
     }
 }

@@ -250,4 +250,25 @@ input[type="date"]:focus, input[type="time"]:focus {
 ::-webkit-calendar-picker-indicator {
     filter: invert(1) hue-rotate(130deg) brightness(1.5);
     cursor: pointer;
+}
+
+.control-group {
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+}
+
+.control-group label {
+    margin-right: 10px;
+    min-width: 120px;
+}
+
+.slider {
+    width: 150px;
+    margin-right: 10px;
+}
+
+#pathCountValue {
+    min-width: 30px;
+    text-align: center;
 } 
