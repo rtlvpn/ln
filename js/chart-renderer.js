@@ -130,7 +130,18 @@ function renderChart(candlestickData, heatmapData) {
         autosize: true
     };
     
-    Plotly.newPlot('chart', [trace2, trace1], layout, {responsive: true});
+    Plotly.newPlot('chart', [trace2, trace1], layout, {
+        responsive: true,
+        displayModeBar: true,
+        toImageButtonOptions: {
+            format: 'png',
+            filename: 'milk_price_chart',
+            height: 600,
+            width: 1200,
+            scale: 2
+        },
+        plotGlPixelRatio: 2
+    });
     
     // Create the volume profile chart if enabled
     const showCVP = document.getElementById('showCVP').checked;

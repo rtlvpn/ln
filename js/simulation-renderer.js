@@ -148,5 +148,9 @@ function renderSimulationChart(heatmapData, predictionData) {
     };
     
     // Create the chart
-    Plotly.newPlot('simulationChart', traces, layout);
+    Plotly.newPlot('simulationChart', traces, layout, {
+        responsive: true,
+        displayModeBar: true,
+        plotGlPixelRatio: 2
+    });
 } 
