@@ -88,6 +88,10 @@
                 <input type="checkbox" id="showOBM" checked>
                 <label for="showOBM">Show Order Book Momentum</label>
             </div>
+            <div class="control-group">
+                <label for="showSimulation">Show Simulation:</label>
+                <input type="checkbox" id="showSimulation" checked>
+            </div>
         </div>
         
         <div class="charts-wrapper">
@@ -96,12 +100,16 @@
         </div>
         
         <div id="obmChart" class="obm-chart-container"></div>
+        <div class="chart-container">
+            <div id="simulationChart" class="chart"></div>
+        </div>
     </div>
 
     <script src="js/utils.js"></script>
     <script src="js/obm-calculator.js"></script>
     <script src="js/price-prediction.js"></script>
     <script src="js/chart-renderer.js"></script>
+    <script src="js/simulation-renderer.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

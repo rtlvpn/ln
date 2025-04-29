@@ -90,6 +90,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Set up event listener for the simulation toggle
+    const simulationToggle = document.getElementById('showSimulation');
+    if (simulationToggle) {
+        simulationToggle.addEventListener('change', function() {
+            if (window.cachedCandlestickData && window.cachedHeatmapData) {
+                // Only re-render the simulation chart if prediction data is cached
+                if (window.cachedPredictionData) {
+                    renderSimulationChart(window.cachedHeatmapData, window.cachedPredictionData);
+                }
+            }
+        });
+    }
 });
 
 // Function to load data from API
@@ -181,16 +194,24 @@ function loadData(fullRefresh = false) {
     });
 }
 
-// Make sure to cache the data when fetching
+// Update the data caching in your fetchData function
 async function fetchData(timeframe) {
     try {
         // Fetch data code...
         
-        // Cache the data for reuse
+        // Calculate prediction data
+        const predictionData = calculatePricePrediction(
+            heatmapData, 
+            candlestickData,
+            parseInt(document.getElementById('pathCount').value) || 4
+        );
+        
+        // Cache all data for reuse
         window.cachedCandlestickData = candlestickData;
         window.cachedHeatmapData = heatmapData;
+        window.cachedPredictionData = predictionData;
         
-        // Render the chart
+        // Render the charts
         renderChart(candlestickData, heatmapData);
     } catch (error) {
         console.error('Error fetching data:', error);
