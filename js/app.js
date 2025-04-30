@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadData(true); // true indicates a full load
     
     // Auto refresh every 120 seconds (2 minutes)
-    setInterval(() => loadData(false), 120000);
+    setInterval(() => loadData(false), 120000000);
     
     // Set up event listener for the path count slider
     const pathCountSlider = document.getElementById('pathCount');
@@ -136,14 +136,28 @@ document.addEventListener('DOMContentLoaded', function() {
             // Try to initialize TensorFlow
             const initialized = await initTensorFlow();
             
-            // Update UI based on result
-            if (tensorStatus) {
-                if (initialized) {
-                    tensorStatus.textContent = gpuAvailable ? 
-                        'TensorFlow.js ready with GPU acceleration' : 
-                        'TensorFlow.js ready (CPU mode)';
-                    tensorStatus.style.color = gpuAvailable ? '#00ff00' : '#ffff00';
-                } else {
+            // Test GPU performance if initialized
+            if (initialized) {
+                const performanceResults = await testGPUPerformance();
+                
+                // Update UI based on result
+                if (tensorStatus) {
+                    if (performanceResults.gpuWorks && performanceResults.speedup > 1.5) {
+                        // Good GPU acceleration
+                        tensorStatus.textContent = `TensorFlow.js v3.21.0 with GPU acceleration (${performanceResults.speedup.toFixed(1)}x faster)`;
+                        tensorStatus.style.color = '#00ff00';
+                    } else if (performanceResults.gpuWorks) {
+                        // GPU works but not much faster
+                        tensorStatus.textContent = `TensorFlow.js v3.21.0 with minimal GPU advantage (${performanceResults.speedup.toFixed(1)}x)`;
+                        tensorStatus.style.color = '#ffff00';
+                    } else {
+                        // No GPU acceleration
+                        tensorStatus.textContent = 'TensorFlow.js v3.21.0 running on CPU only';
+                        tensorStatus.style.color = '#ff9900';
+                    }
+                }
+            } else {
+                if (tensorStatus) {
                     tensorStatus.textContent = 'TensorFlow.js not available, using P5.js';
                     tensorStatus.style.color = '#ff9900';
                     
@@ -186,6 +200,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Add this to your app.js to allow performance testing
+    addPerformanceTestButton();
 });
 
 // Function to load data from API
@@ -362,4 +379,84 @@ function initTensorToggle() {
             }
         });
     }
+}
+
+// Add this code to initialize WebWorkers for tensor calculations
+function initTensorWorkers() {
+  if (window.Worker) {
+    const workerCount = navigator.hardwareConcurrency || 4;
+    console.log(`Initializing ${workerCount} workers for tensor operations`);
+    
+    window.tensorWorkers = [];
+    for (let i = 0; i < workerCount; i++) {
+      const worker = new Worker('js/tensor-worker.js');
+      window.tensorWorkers.push(worker);
+    }
+    
+    return true;
+  }
+  
+  console.warn('WebWorkers not supported in this browser');
+  return false;
+}
+
+// Call this function during initialization
+initTensorWorkers();
+
+// Add this to your app.js to allow performance testing
+function addPerformanceTestButton() {
+  const controlsDiv = document.querySelector('.controls');
+  if (!controlsDiv) return;
+  
+  const testButton = document.createElement('button');
+  testButton.textContent = 'Test GPU Performance';
+  testButton.onclick = async function() {
+    const resultSpan = document.createElement('span');
+    resultSpan.textContent = 'Testing...';
+    resultSpan.style.marginLeft = '10px';
+    testButton.parentNode.insertBefore(resultSpan, testButton.nextSibling);
+    
+    // Run the test
+    try {
+      // First ensure TensorFlow is initialized
+      await initTensorFlow();
+      
+      // Create large tensors for test
+      const SIZE = 2000;
+      const a = tf.randomNormal([SIZE, SIZE]);
+      const b = tf.randomNormal([SIZE, SIZE]);
+      
+      // GPU test
+      const gpuStart = performance.now();
+      const gpuResult = a.matMul(b);
+      await gpuResult.data();
+      const gpuTime = performance.now() - gpuStart;
+      
+      // CPU test
+      await tf.setBackend('cpu');
+      const cpuStart = performance.now();
+      const cpuResult = a.matMul(b);
+      await cpuResult.data();
+      const cpuTime = performance.now() - cpuStart;
+      
+      // Switch back to WebGL if available
+      if (gpuAvailable) await tf.setBackend('webgl');
+      
+      // Display results
+      const speedup = cpuTime / gpuTime;
+      resultSpan.textContent = `GPU: ${gpuTime.toFixed(1)}ms, CPU: ${cpuTime.toFixed(1)}ms, Speedup: ${speedup.toFixed(1)}x`;
+      resultSpan.style.color = speedup > 1.5 ? '#00ff00' : '#ffff00';
+      
+      // Cleanup
+      a.dispose();
+      b.dispose();
+      gpuResult.dispose();
+      cpuResult.dispose();
+    } catch (error) {
+      resultSpan.textContent = `Error: ${error.message}`;
+      resultSpan.style.color = '#ff0000';
+    }
+  };
+  
+  controlsDiv.appendChild(testButton);
 } 
