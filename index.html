@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Milk Price and Orderbook Heatmap</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -91,6 +92,15 @@
                 <span class="tooltip">May reduce performance</span>
             </div>
             
+            <div class="control-group implementation-selector">
+                <label for="implementationType">Implementation Type:</label>
+                <select id="implementationType">
+                    <option value="p5">P5.js (CPU)</option>
+                    <option value="tensor">TensorFlow.js (GPU)</option>
+                </select>
+                <span id="tensorStatus" class="tensor-status">Using P5.js implementation</span>
+            </div>
+            
             <button id="refreshBtn">Refresh Data</button>
             <div class="checkbox-container">
                 <input type="checkbox" id="showCVP" checked>
@@ -127,6 +137,7 @@
     <script src="js/chart-renderer.js"></script>
     <script src="js/simulation-renderer.js"></script>
     <script src="js/fermat-p5.js"></script>
+    <script src="js/fermat-tensor.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

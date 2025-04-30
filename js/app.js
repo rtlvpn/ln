@@ -125,6 +125,67 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Initialize TensorFlow.js on page load
+    (async function() {
+        try {
+            // Update status indicator
+            const tensorStatus = document.getElementById('tensorStatus');
+            if (tensorStatus) tensorStatus.textContent = 'Initializing TensorFlow.js...';
+            
+            // Try to initialize TensorFlow
+            const initialized = await initTensorFlow();
+            
+            // Update UI based on result
+            if (tensorStatus) {
+                if (initialized) {
+                    tensorStatus.textContent = gpuAvailable ? 
+                        'TensorFlow.js ready with GPU acceleration' : 
+                        'TensorFlow.js ready (CPU mode)';
+                    tensorStatus.style.color = gpuAvailable ? '#00ff00' : '#ffff00';
+                } else {
+                    tensorStatus.textContent = 'TensorFlow.js not available, using P5.js';
+                    tensorStatus.style.color = '#ff9900';
+                    
+                    // Force P5.js option
+                    const implementationSelect = document.getElementById('implementationType');
+                    if (implementationSelect) implementationSelect.value = 'p5';
+                }
+            }
+        } catch (error) {
+            console.error('Error during TensorFlow initialization:', error);
+            const tensorStatus = document.getElementById('tensorStatus');
+            if (tensorStatus) {
+                tensorStatus.textContent = 'Error initializing TensorFlow.js';
+                tensorStatus.style.color = '#ff0000';
+            }
+        }
+    })();
+    
+    // Add event listener for implementation type change
+    const implementationSelect = document.getElementById('implementationType');
+    if (implementationSelect) {
+        implementationSelect.addEventListener('change', function() {
+            // Update UI status
+            const tensorStatus = document.getElementById('tensorStatus');
+            if (tensorStatus) {
+                if (this.value === 'tensor') {
+                    tensorStatus.textContent = gpuAvailable ? 
+                        'Using TensorFlow.js with GPU acceleration' : 
+                        'Using TensorFlow.js (CPU mode)';
+                    tensorStatus.style.color = gpuAvailable ? '#00ff00' : '#ffff00';
+                } else {
+                    tensorStatus.textContent = 'Using P5.js implementation';
+                    tensorStatus.style.color = '#ffffff';
+                }
+            }
+            
+            // Re-render with new implementation if data is available
+            if (window.cachedCandlestickData && window.cachedHeatmapData) {
+                renderChart(window.cachedCandlestickData, window.cachedHeatmapData);
+            }
+        });
+    }
 });
 
 // Function to load data from API
@@ -216,26 +277,31 @@ function loadData(fullRefresh = false) {
     });
 }
 
-// Update the data caching in your fetchData function
+// Modified fetchData function to support tensor implementation
 async function fetchData(timeframe) {
     try {
         // Fetch data code...
         
-        // Check if high performance mode is enabled
-        const highPerformanceMode = document.getElementById('highPerformanceMode').checked;
+        // Check selected implementation
+        const implementationType = document.getElementById('implementationType').value;
+        const pathCount = parseInt(document.getElementById('pathCount').value) || 4;
         
-        // Use the optimized p5.js version when high performance mode is on
-        const predictionData = highPerformanceMode ? 
-            calculatePricePredictionP5(
+        let predictionData;
+        
+        // Use the selected implementation
+        if (implementationType === 'tensor') {
+            predictionData = await calculatePricePredictionTensor(
                 heatmapData, 
                 candlestickData,
-                parseInt(document.getElementById('pathCount').value) || 4
-            ) : 
-            calculatePricePrediction(
-                heatmapData, 
-                candlestickData,
-                parseInt(document.getElementById('pathCount').value) || 4
+                pathCount
             );
+        } else {
+            predictionData = calculatePricePredictionP5(
+                heatmapData, 
+                candlestickData,
+                pathCount
+            );
+        }
         
         // Cache all data for reuse
         window.cachedCandlestickData = candlestickData;
@@ -246,5 +312,54 @@ async function fetchData(timeframe) {
         renderChart(candlestickData, heatmapData);
     } catch (error) {
         console.error('Error fetching data:', error);
+    }
+}
+
+// Add a function to initialize TensorFlow.js
+function initTensorToggle() {
+    const implementationSelect = document.getElementById('implementationType');
+    if (implementationSelect) {
+        implementationSelect.addEventListener('change', async function() {
+            const selectedImpl = this.value;
+            
+            // If TensorFlow.js is selected, try to initialize it
+            if (selectedImpl === 'tensor') {
+                const tensorStatus = document.getElementById('tensorStatus');
+                if (tensorStatus) tensorStatus.textContent = 'Initializing TensorFlow.js...';
+                
+                try {
+                    const initialized = await initTensorFlow();
+                    if (initialized) {
+                        if (tensorStatus) {
+                            tensorStatus.textContent = gpuAvailable ? 
+                                'TensorFlow.js initialized with GPU acceleration' : 
+                                'TensorFlow.js initialized (CPU mode)';
+                            tensorStatus.style.color = gpuAvailable ? '#00ff00' : '#ffff00';
+                        }
+                    } else {
+                        if (tensorStatus) {
+                            tensorStatus.textContent = 'Failed to initialize TensorFlow.js, using P5.js';
+                            tensorStatus.style.color = '#ff0000';
+                        }
+                        implementationSelect.value = 'p5';
+                    }
+                } catch (error) {
+                    console.error('Error initializing TensorFlow:', error);
+                    if (tensorStatus) {
+                        tensorStatus.textContent = 'Error initializing TensorFlow.js';
+                        tensorStatus.style.color = '#ff0000';
+                    }
+                    implementationSelect.value = 'p5';
+                }
+            } else {
+                const tensorStatus = document.getElementById('tensorStatus');
+                if (tensorStatus) tensorStatus.textContent = 'Using P5.js implementation';
+            }
+            
+            // If we have data cached, recalculate using the selected implementation
+            if (window.cachedCandlestickData && window.cachedHeatmapData) {
+                renderChart(window.cachedCandlestickData, window.cachedHeatmapData);
+            }
+        });
     }
 } 

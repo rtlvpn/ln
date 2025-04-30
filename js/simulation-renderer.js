@@ -139,7 +139,7 @@ function renderSimulationChart(heatmapData, predictionData) {
             x: 1,
             xanchor: 'right',
             y: 1,
-            bgcolor: '#00221f',
+            bgcolor: '#00221f5b',
             bordercolor: '#00544f',
             font: { color: '#00ff88' }
         },
