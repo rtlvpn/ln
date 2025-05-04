@@ -194,39 +194,57 @@ function determineEntryPointsP5(heatmapData, candlestickData, pathCount = 10) {
 function findOptimalPricePathP5(p5Instance, heatmapData, refractiveIndices, resistanceMap, candlestickData, entryPoint, allPaths, pathIndex) {
   const priceLevels = heatmapData.priceLevels;
   const timestamps = heatmapData.timestamps;
-  const path = [];
+  // Pre-allocate path array with expected size for better memory management
+  const path = new Array(timestamps.length);
+  let pathLength = 0;
   
   // Make sure we have enough data
   if (timestamps.length < 2 || candlestickData.length < 2) {
-    return { path, resistanceMap };
+    return { path: [], resistanceMap };
   }
   
-  // Calculate volatility for search radius
-  const priceHistory = candlestickData.map(c => c.close);
-  const volatility = calculateVolatilityP5(priceHistory);
+  // Calculate volatility for search radius (memoize this if called multiple times)
+  const volatility = calculateVolatilityP5(candlestickData.map(c => c.close));
   const baseSearchRadius = Math.max(2, Math.floor(priceLevels.length * volatility * 0.2));
   
   // Initialize with entry point
-  let startTimeIndex = entryPoint ? (entryPoint.timeIndex || 0) : 0;
+  const startTimeIndex = entryPoint ? (entryPoint.timeIndex || 0) : 0;
   let currentPriceIndex = entryPoint ? entryPoint.index : findClosestPriceIndex(priceLevels, candlestickData[0].close);
   
-  path.push({ 
+  // Use direct assignment instead of push for better performance
+  path[pathLength++] = { 
     time: new Date(timestamps[startTimeIndex] * 1000), 
     price: priceLevels[currentPriceIndex],
     resistance: refractiveIndices[startTimeIndex][currentPriceIndex]
-  });
+  };
   
-  // Pre-compute price indices for actual prices
-  const actualPriceIndices = [];
-  for (let i = 0; i < candlestickData.length; i++) {
-    actualPriceIndices.push(findClosestPriceIndex(priceLevels, candlestickData[i].close));
+  // Pre-compute price indices for actual prices (use TypedArray for better performance)
+  const actualPriceIndicesLength = candlestickData.length;
+  const actualPriceIndices = new Int32Array(actualPriceIndicesLength);
+  for (let i = 0; i < actualPriceIndicesLength; i++) {
+    actualPriceIndices[i] = findClosestPriceIndex(priceLevels, candlestickData[i].close);
   }
   
-  // For each timestamp, find the next point on the path
-  // This is the core optimization using p5.js for vector calculations
+  // Pre-compute timestamps as milliseconds to avoid repeated Date creation
+  const timestampsMs = new Float64Array(timestamps.length);
+  for (let i = 0; i < timestamps.length; i++) {
+    timestampsMs[i] = timestamps[i] * 1000;
+  }
+  
+  // Cache path repulsion parameters if applicable
+  let pathRepulsionDistance = 0;
+  if (allPaths.length > 0 && pathIndex >= 0) {
+    pathRepulsionDistance = Math.max(1, Math.floor(priceLevels.length / (allPaths.length * 3)));
+  }
+  
+  // Create reusable vector objects to avoid repeatedly creating new ones
+  const currentPos = p5Instance.createVector(0, 0);
+  const otherPos = p5Instance.createVector(0, 0);
+  
+  // Process the path
   for (let i = startTimeIndex + 1; i < timestamps.length; i++) {
     // Find actual price at this timestamp if available
-    const actualPriceIndex = i < candlestickData.length ? actualPriceIndices[i] : -1;
+    const actualPriceIndex = i < actualPriceIndicesLength ? actualPriceIndices[i] : -1;
     
     // Dynamic search radius that adapts to price movement
     const searchRadius = baseSearchRadius + 
@@ -235,92 +253,99 @@ function findOptimalPricePathP5(p5Instance, heatmapData, refractiveIndices, resi
     // Define search bounds
     const lowerBound = Math.max(0, currentPriceIndex - searchRadius);
     const upperBound = Math.min(priceLevels.length - 1, currentPriceIndex + searchRadius);
+    const rangeSize = upperBound - lowerBound + 1;
     
-    // Use p5.js for optimized math calculations
-    let minResistance = Infinity;
-    let optimalNextIndex = currentPriceIndex;
+    // Use TypedArrays for faster manipulation
+    const options = new Int32Array(rangeSize);
+    const resistances = new Float32Array(rangeSize);
     
-    // Create arrays for vectorized calculations
-    const options = [];
-    const resistances = [];
-    
-    // Store candidates for parallel processing
-    for (let j = lowerBound; j <= upperBound; j++) {
-      options.push(j);
+    // Fill options array directly - much faster than push operations
+    for (let idx = 0; idx < rangeSize; idx++) {
+      options[idx] = lowerBound + idx;
+      // Initialize with high value to avoid a separate initialization step
+      resistances[idx] = Infinity;
     }
     
-    // Process options in parallel using p5.js
-    options.forEach(j => {
+    // Prepare timestamp once outside the loop
+    const currentTimeMs = timestampsMs[i];
+    
+    // Process options - unrolled from forEach for better performance
+    for (let optIdx = 0; optIdx < rangeSize; optIdx++) {
+      const j = options[optIdx];
+      
       // Skip extremely low liquidity areas
       if (refractiveIndices[i][j] > 3) {
-        resistances.push(Infinity);
-        return;
+        continue; // Skip to next iteration
       }
       
       // Calculate path resistance components
       const opticalResistance = refractiveIndices[i][j];
       const priceDelta = j - currentPriceIndex;
-      const bendPenalty = Math.abs(priceDelta) * 0.05;
+      const absPriceDelta = Math.abs(priceDelta);
+      const bendPenalty = absPriceDelta * 0.05;
       
-      const actualPriceAttraction = actualPriceIndex >= 0 ? 
-        0.3 * Math.abs(j - actualPriceIndex) / priceLevels.length : 0;
+      // Combine calculations for fewer operations
+      let combinedResistance = opticalResistance + bendPenalty;
       
-      const gradientEffect = priceDelta > 0 ? 
-        resistanceMap[i][j].gradientUp * 0.1 : 
-        resistanceMap[i][j].gradientDown * 0.1;
+      // Only add if actual price is available
+      if (actualPriceIndex >= 0) {
+        combinedResistance += 0.3 * Math.abs(j - actualPriceIndex) / priceLevels.length;
+      }
       
-      // Calculate path repulsion more efficiently
-      let repulsionEffect = 0;
+      // Add gradient effect - conditional branch for less computation
+      if (priceDelta > 0) {
+        combinedResistance += resistanceMap[i][j].gradientUp * 0.1;
+      } else if (priceDelta < 0) {
+        combinedResistance += resistanceMap[i][j].gradientDown * 0.1;
+      }
       
+      // Calculate path repulsion only if necessary
       if (allPaths.length > 0 && pathIndex >= 0) {
-        const pathRepulsionDistance = Math.max(1, Math.floor(priceLevels.length / (allPaths.length * 3)));
-        
-        // Create p5.js vector for current position
-        const currentPos = p5Instance.createVector(i, j);
+        // Set position values directly instead of creating new vector
+        currentPos.set(i, j);
         
         for (let p = 0; p < allPaths.length; p++) {
           // Skip comparing to self
           if (p === pathIndex) continue;
           
-          // Find this path's point at current timestamp
           const otherPath = allPaths[p];
-          const otherTimePoints = otherPath.filter(pt => 
-            pt.time.getTime() === new Date(timestamps[i] * 1000).getTime()
-          );
           
-          if (otherTimePoints.length > 0) {
-            const otherPoint = otherTimePoints[0];
+          // Binary search is faster than filter for large arrays
+          let matchingPointIndex = -1;
+          for (let k = 0; k < otherPath.length; k++) {
+            if (otherPath[k].time.getTime() === currentTimeMs) {
+              matchingPointIndex = k;
+              break;
+            }
+          }
+          
+          if (matchingPointIndex >= 0) {
+            const otherPoint = otherPath[matchingPointIndex];
             const otherPriceIndex = findClosestPriceIndex(priceLevels, otherPoint.price);
             
-            // Create p5.js vector for other path position
-            const otherPos = p5Instance.createVector(i, otherPriceIndex);
+            // Set values directly
+            otherPos.set(i, otherPriceIndex);
             
-            // Calculate distance using p5.js vector math
-            const distance = p5Instance.abs(currentPos.y - otherPos.y);
+            // Fast math operations 
+            const distance = Math.abs(currentPos.y - otherPos.y);
             
-            // Add repulsion if too close
             if (distance < pathRepulsionDistance) {
               const repulsionForce = (pathRepulsionDistance - distance) / pathRepulsionDistance;
-              repulsionEffect += repulsionForce * 0.4;
+              combinedResistance += repulsionForce * 0.4;
             }
           }
         }
       }
       
-      // Total resistance for this path option
-      const totalResistance = 
-        opticalResistance + 
-        bendPenalty + 
-        actualPriceAttraction + 
-        gradientEffect + 
-        repulsionEffect;
-      
-      resistances.push(totalResistance);
-    });
+      // Store the result
+      resistances[optIdx] = combinedResistance;
+    }
     
-    // Find the minimum resistance path
+    // Find minimum resistance (use direct array access)
+    let minResistance = Infinity;
     let minIndex = 0;
-    for (let k = 0; k < resistances.length; k++) {
+    
+    for (let k = 0; k < rangeSize; k++) {
       if (resistances[k] < minResistance) {
         minResistance = resistances[k];
         minIndex = k;
@@ -332,15 +357,16 @@ function findOptimalPricePathP5(p5Instance, heatmapData, refractiveIndices, resi
       currentPriceIndex = options[minIndex];
     }
     
-    // Add to final path
-    path.push({
-      time: new Date(timestamps[i] * 1000),
+    // Add to final path - direct assignment is faster than push
+    path[pathLength++] = {
+      time: new Date(currentTimeMs),
       price: priceLevels[currentPriceIndex],
       resistance: refractiveIndices[i][currentPriceIndex]
-    });
+    };
   }
   
-  return { path, resistanceMap };
+  // Trim the path to actual length used
+  return { path: path.slice(0, pathLength), resistanceMap };
 }
 
 // Optimized momentum calculation using p5.js
