@@ -24,7 +24,7 @@ body {
 }
 .main-chart-container {
     width: 75%;
-    height: 600px;
+    height: 800px;
     border: 1px solid rgba(0, 255, 157, 0.3);
     margin-top: 20px;
     background-color: rgba(10, 10, 20, 0.5);
@@ -32,7 +32,7 @@ body {
 }
 .cvp-chart-container {
     width: 25%;
-    height: 600px;
+    height: 800px;
     border: 1px solid rgba(0, 255, 157, 0.3);
     margin-top: 20px;
     background-color: rgba(10, 10, 20, 0.5);
@@ -40,7 +40,7 @@ body {
 }
 .chart-container {
     width: 100%;
-    height: 600px;
+    height: 800px;
     border: 1px solid rgba(0, 255, 157, 0.3);
     margin-top: 20px;
     background-color: rgba(10, 10, 20, 0.5);
@@ -142,7 +142,7 @@ label {
 /* Add style for the OBM chart */
 .obm-chart-container {
     width: 100%;
-    height: 250px; /* Increase height for more impact */
+    height: 300px;
     border: 1px solid rgba(0, 255, 157, 0.6);
     margin-top: 20px;
     background-color: rgba(10, 10, 20, 0.8);
@@ -275,10 +275,16 @@ input[type="date"]:focus, input[type="time"]:focus {
 
 #simulationChart {
     width: 100%;
-    height: 400px;
+    height: 800px;
     margin-top: 20px;
     background-color: #0a0a14;
     border: 1px solid #1a3c3e;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
+}
+
+#simulationChart:hover {
+    box-shadow: 0 0 20px rgba(0, 255, 157, 0.4);
 }
 
 .chart-container {
@@ -299,22 +305,24 @@ input[type="date"]:focus, input[type="time"]:focus {
 
 /* Add styles for the divider */
 .chart-divider {
-    position: relative;
-    width: 100%;
-    height: 30px;
-    margin: 20px 0;
+    margin-top: 10px;
+    margin-bottom: 20px;
     text-align: center;
-    border-bottom: 1px solid #1a3c3e;
+    position: relative;
+    border-bottom: 1px solid rgba(0, 255, 157, 0.3);
 }
 
 .divider-label {
     position: relative;
-    top: 15px;
-    background: #0a0a14;
+    top: 10px;
+    background-color: #121212;
     padding: 0 15px;
-    color: #00cc66;
-    font-size: 16px;
-    font-weight: bold;
+    color: #00ff9d;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px rgba(0, 255, 157, 0.6);
 }
 
 /* TensorFlow.js integration styles */
@@ -376,4 +384,67 @@ input[type="date"]:focus, input[type="time"]:focus {
   0% { box-shadow: 0 0 15px rgba(0, 255, 157, 0.3); }
   50% { box-shadow: 0 0 25px rgba(0, 255, 157, 0.6); }
   100% { box-shadow: 0 0 15px rgba(0, 255, 157, 0.3); }
+}
+
+/* Chart container base styles - standardized for all chart types */
+.chart-container, 
+.main-chart-container, 
+.cvp-chart-container,
+.obm-chart-container,
+.chart {  /* Added .chart class for consistency */
+    border: 1px solid rgba(0, 255, 157, 0.3);
+    background-color: rgba(10, 10, 20, 0.5);
+    transition: all 0.3s ease;
+    margin-top: 20px;
+    box-shadow: 0 0 20px rgba(0, 255, 157, 0.4), inset 0 0 30px rgba(0, 0, 20, 0.6);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+/* Increase all chart heights */
+.chart-container,
+.main-chart-container,
+.cvp-chart-container,
+.chart {
+    height: 800px; /* Increased from 600px */
+    width: 100%;
+}
+
+/* Specific stylings for the Fermat simulation chart */
+#simulationChart {
+    height: 800px;
+    width: 100%;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
+}
+
+#simulationChart:hover {
+    box-shadow: 0 0 20px rgba(0, 255, 157, 0.4);
+}
+
+/* Fixed plotly hover labels */
+.js-plotly-plot .plotly .hoverlabel {
+    border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Fix Plotly conflicts by ensuring our styles take priority */
+.js-plotly-plot .plotly .main-svg {
+    background-color: transparent !important;
+}
+
+.js-plotly-plot .plotly .modebar {
+    background-color: rgba(10, 10, 20, 0.7) !important;
+}
+
+.js-plotly-plot .plotly .modebar-btn path {
+    fill: rgba(0, 255, 157, 0.7) !important;
+}
+
+.js-plotly-plot .plotly .modebar-btn:hover path {
+    fill: rgba(0, 255, 157, 1) !important;
+}
+
+.js-plotly-plot .plotly .modebar-btn:hover {
+    background-color: rgba(10, 10, 20, 0.9) !important;
 }

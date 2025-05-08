@@ -28,7 +28,7 @@ function renderSimulationChart(heatmapData, predictionData) {
         traces.push({
             x: pathData.map(p => p.time),
             y: pathData.map(p => p.price),
-            type: 'scatter',
+            type: 'scattergl', // Changed from 'scatter' to 'scattergl' for WebGL rendering
             mode: 'lines',
             name: `Path ${pathIndex + 1}`,
             line: {
@@ -87,7 +87,7 @@ function renderSimulationChart(heatmapData, predictionData) {
         traces.push({
             x: timePoints,
             y: avgPrices,
-            type: 'scatter',
+            type: 'scattergl', // Changed to scattergl
             mode: 'lines',
             name: 'Ensemble Prediction',
             line: {
@@ -119,7 +119,7 @@ function renderSimulationChart(heatmapData, predictionData) {
             line: { color: 'rgba(255, 210, 0, 0.5)', width: 1 },
             name: '68% Confidence',
             showlegend: true,
-            type: 'scatter',
+            type: 'scattergl', // Changed to scattergl
             hoverinfo: 'text',
             hovertext: 'Confidence Interval: 68% of outcomes expected in this range',
             hoverlabel: {
@@ -138,7 +138,7 @@ function renderSimulationChart(heatmapData, predictionData) {
             line: { color: 'rgba(180, 150, 0, 0.5)', width: 1 },
             name: '95% Confidence',
             showlegend: true,
-            type: 'scatter',
+            type: 'scattergl', // Changed to scattergl
             hoverinfo: 'text',
             hovertext: 'Confidence Interval: 95% of outcomes expected in this range',
             hoverlabel: {
@@ -196,7 +196,7 @@ function renderSimulationChart(heatmapData, predictionData) {
                     color: color,
                     width: arrowWidth
                 },
-                type: 'scatter',
+                type: 'scattergl', // Changed to scattergl
                 showlegend: i === 0, // Only show in legend once
                 name: 'Momentum Vector',
                 hoverinfo: 'text',
@@ -229,7 +229,7 @@ function renderSimulationChart(heatmapData, predictionData) {
             x: timePoints,
             y: pricePoints,
             mode: 'markers',
-            type: 'scatter',
+            type: 'scattergl', // Changed to scattergl
             marker: {
                 size: 8, // Increased for better visibility
                 color: normalizedForces,
@@ -282,7 +282,7 @@ function renderSimulationChart(heatmapData, predictionData) {
         });
     }
     
-    // Configure layout with responsive design
+    // Configure layout with improved responsive design
     const layout = {
         title: {
             text: `Fermat Light Ray Price Prediction (${pathCount} Paths)`,
@@ -367,6 +367,7 @@ function renderSimulationChart(heatmapData, predictionData) {
         },
         hovermode: 'closest',
         hoverdistance: 30,
+        height: 800, // Explicit height to match CSS
         hoverlabel: {
             font: {
                 family: 'Arial, sans-serif'
@@ -411,7 +412,7 @@ function renderSimulationChart(heatmapData, predictionData) {
         autosize: true
     };
     
-    // Create the chart with better responsiveness
+    // Create the chart with better responsiveness and WebGL options
     Plotly.newPlot('simulationChart', traces, layout, {
         responsive: true,
         displayModeBar: true,
@@ -431,42 +432,28 @@ function renderSimulationChart(heatmapData, predictionData) {
         toImageButtonOptions: {
             format: 'png',
             filename: 'fermat_light_ray_prediction',
-            height: 800,
+            height: 800, // Match height with CSS
             width: 1200,
             scale: 2
         },
-        plotGlPixelRatio: window.devicePixelRatio || 2,
+        plotGlPixelRatio: window.devicePixelRatio || 2, // Optimize WebGL for device pixel ratio
         staticPlot: false,
         doubleClick: 'reset',
-        scrollZoom: true
+        scrollZoom: true,
+        // Add WebGL-specific options
+        showSendToCloud: false,
+        mapboxAccessToken: null, // Not using mapbox
+        setBackground: 'transparent', // Better for WebGL rendering
+        useResizeHandler: true, // Ensure proper resizing
+        // WebGL performance options
+        showAxisDragHandles: true,
+        showAxisRangeEntryBoxes: true,
+        showTips: true,
+        rendererOverride: 'webgl' // Explicitly prefer WebGL rendering
     });
     
     // Add window resize handler for better responsiveness
     window.addEventListener('resize', function() {
         Plotly.Plots.resize(document.getElementById('simulationChart'));
     });
-    
-    // Add custom CSS styles for hover effect
-    const style = document.createElement('style');
-    style.textContent = `
-        #simulationChart {
-            transition: all 0.3s ease;
-            box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
-        }
-        #simulationChart:hover {
-            box-shadow: 0 0 20px rgba(0, 255, 157, 0.4);
-        }
-        .no-data-message {
-            color: #ff5757;
-            text-align: center;
-            padding: 20px;
-            font-family: 'Arial', sans-serif;
-            font-size: 16px;
-        }
-        .js-plotly-plot .plotly .hoverlabel {
-            border-radius: 4px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-        }
-    `;
-    document.head.appendChild(style);
 } 

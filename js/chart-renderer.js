@@ -134,7 +134,8 @@ function renderChart(candlestickData, heatmapData) {
             },
             plot_bgcolor: '#0a0a12',
             paper_bgcolor: '#0f0f1f',
-            height: 600,
+            height: 800,
+            autosize: true,
             yaxis: {
                 title: {
                     text: 'Price (USDT)',
@@ -171,8 +172,7 @@ function renderChart(candlestickData, heatmapData) {
                 b: 50,
                 t: 50,
                 pad: 4
-            },
-            autosize: true
+            }
         };
         
         Plotly.newPlot('chart', [trace2, trace1], layout, {
@@ -181,7 +181,7 @@ function renderChart(candlestickData, heatmapData) {
             toImageButtonOptions: {
                 format: 'png',
                 filename: 'milk_price_chart',
-                height: 600,
+                height: 800,
                 width: 1200,
                 scale: 2
             },
@@ -226,7 +226,7 @@ function renderChart(candlestickData, heatmapData) {
                 },
                 plot_bgcolor: '#0a0a12',
                 paper_bgcolor: '#0f0f1f',
-                height: 600,
+                height: 800,
                 yaxis: {
                     title: '',
                     side: 'right',
