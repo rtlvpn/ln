@@ -19,38 +19,6 @@ function renderSimulationChart(heatmapData, predictionData) {
     // Create an array for all the traces
     const traces = [];
     
-    // Use color gradient for better path differentiation
-    predictionData.predictedPaths.forEach((pathData, pathIndex) => {
-        // Calculate color using HSL for a better visual spectrum
-        const hue = (pathIndex / pathCount) * 120; // Use green spectrum (0-120)
-        const pathColor = `hsla(${hue}, 100%, 50%, 0.7)`; // Higher opacity for better visibility
-        
-        traces.push({
-            x: pathData.map(p => p.time),
-            y: pathData.map(p => p.price),
-            type: 'scattergl', // Changed from 'scatter' to 'scattergl' for WebGL rendering
-            mode: 'lines',
-            name: `Path ${pathIndex + 1}`,
-            line: {
-                shape: 'linear', // Use linear instead of spline for light ray effect
-                color: pathColor,
-                width: 1.5
-            },
-            // Enhanced hover information
-            hoverinfo: 'text',
-            hovertext: pathData.map(p => `
-                Path ${pathIndex + 1}<br>
-                Time: ${p.time.toLocaleTimeString()}<br>
-                Price: $${p.price.toFixed(6)}`
-            ),
-            hoverlabel: {
-                bgcolor: '#0a192f',
-                bordercolor: pathColor,
-                font: { family: 'Arial, sans-serif', size: 12 }
-            }
-        });
-    });
-    
     // Calculate ensemble prediction (average of all paths)
     if (predictionData.predictedPaths.length > 1) {
         // Create time points array from the first path
@@ -83,7 +51,45 @@ function renderSimulationChart(heatmapData, predictionData) {
             return Math.sqrt(variance);
         });
         
-        // Add ensemble prediction (mean) with enhanced hover
+        // FIRST: Add 95% confidence band (mean ± 2 stddev) - moved to back
+        traces.push({
+            x: timePoints.concat(timePoints.slice().reverse()),
+            y: avgPrices.map((avg, i) => avg + 2 * stdDevs[i])
+                .concat(avgPrices.map((avg, i) => avg - 2 * stdDevs[i]).reverse()),
+            fill: 'toself',
+            fillcolor: 'rgba(180, 150, 0, 0.15)',
+            line: { color: 'rgba(180, 150, 0, 0.5)', width: 1 },
+            name: '95% Confidence',
+            showlegend: true,
+            type: 'scattergl', // Changed to scattergl
+            hoverinfo: 'text',
+            hovertext: 'Confidence Interval: 95% of outcomes expected in this range',
+            hoverlabel: {
+                bgcolor: '#0a192f',
+                font: { family: 'Arial, sans-serif', size: 12 }
+            }
+        });
+        
+        // SECOND: Add 68% confidence band (mean ± 1 stddev)
+        traces.push({
+            x: timePoints.concat(timePoints.slice().reverse()),
+            y: avgPrices.map((avg, i) => avg + stdDevs[i])
+                .concat(avgPrices.map((avg, i) => avg - stdDevs[i]).reverse()),
+            fill: 'toself',
+            fillcolor: 'rgba(255, 210, 0, 0.2)',
+            line: { color: 'rgba(255, 210, 0, 0.5)', width: 1 },
+            name: '68% Confidence',
+            showlegend: true,
+            type: 'scattergl', // Changed to scattergl
+            hoverinfo: 'text',
+            hovertext: 'Confidence Interval: 68% of outcomes expected in this range',
+            hoverlabel: {
+                bgcolor: '#0a192f',
+                font: { family: 'Arial, sans-serif', size: 12 }
+            }
+        });
+        
+        // THIRD: Add ensemble prediction (mean)
         traces.push({
             x: timePoints,
             y: avgPrices,
@@ -108,45 +114,39 @@ function renderSimulationChart(heatmapData, predictionData) {
                 font: { family: 'Arial, sans-serif', size: 12 }
             }
         });
-        
-        // Add 68% confidence band (mean ± 1 stddev)
-        traces.push({
-            x: timePoints.concat(timePoints.slice().reverse()),
-            y: avgPrices.map((avg, i) => avg + stdDevs[i])
-                .concat(avgPrices.map((avg, i) => avg - stdDevs[i]).reverse()),
-            fill: 'toself',
-            fillcolor: 'rgba(255, 210, 0, 0.2)',
-            line: { color: 'rgba(255, 210, 0, 0.5)', width: 1 },
-            name: '68% Confidence',
-            showlegend: true,
-            type: 'scattergl', // Changed to scattergl
-            hoverinfo: 'text',
-            hovertext: 'Confidence Interval: 68% of outcomes expected in this range',
-            hoverlabel: {
-                bgcolor: '#0a192f',
-                font: { family: 'Arial, sans-serif', size: 12 }
-            }
-        });
-        
-        // Add 95% confidence band (mean ± 2 stddev)
-        traces.push({
-            x: timePoints.concat(timePoints.slice().reverse()),
-            y: avgPrices.map((avg, i) => avg + 2 * stdDevs[i])
-                .concat(avgPrices.map((avg, i) => avg - 2 * stdDevs[i]).reverse()),
-            fill: 'toself',
-            fillcolor: 'rgba(180, 150, 0, 0.15)',
-            line: { color: 'rgba(180, 150, 0, 0.5)', width: 1 },
-            name: '95% Confidence',
-            showlegend: true,
-            type: 'scattergl', // Changed to scattergl
-            hoverinfo: 'text',
-            hovertext: 'Confidence Interval: 95% of outcomes expected in this range',
-            hoverlabel: {
-                bgcolor: '#0a192f',
-                font: { family: 'Arial, sans-serif', size: 12 }
-            }
-        });
     }
+    
+    // FOURTH: Use color gradient for better path differentiation
+    predictionData.predictedPaths.forEach((pathData, pathIndex) => {
+        // Calculate color using HSL for a better visual spectrum
+        const hue = (pathIndex / pathCount) * 120; // Use green spectrum (0-120)
+        const pathColor = `hsla(${hue}, 100%, 50%, 0.7)`; // Higher opacity for better visibility
+        
+        traces.push({
+            x: pathData.map(p => p.time),
+            y: pathData.map(p => p.price),
+            type: 'scattergl', // Changed from 'scatter' to 'scattergl' for WebGL rendering
+            mode: 'lines',
+            name: `Path ${pathIndex + 1}`,
+            line: {
+                shape: 'linear', // Use linear instead of spline for light ray effect
+                color: pathColor,
+                width: 1.5
+            },
+            // Enhanced hover information
+            hoverinfo: 'text',
+            hovertext: pathData.map(p => `
+                Path ${pathIndex + 1}<br>
+                Time: ${p.time.toLocaleTimeString()}<br>
+                Price: $${p.price.toFixed(6)}`
+            ),
+            hoverlabel: {
+                bgcolor: '#0a192f',
+                bordercolor: pathColor,
+                font: { family: 'Arial, sans-serif', size: 12 }
+            }
+        });
+    });
     
     // Add Momentum Vectors as arrows
     if (predictionData.momentumVectorsCollection && predictionData.momentumVectorsCollection.length > 0) {
@@ -277,6 +277,33 @@ function renderSimulationChart(heatmapData, predictionData) {
             hoverlabel: {
                 bgcolor: '#0a192f',
                 bordercolor: '#00ff9d',
+                font: { family: 'Arial, sans-serif', size: 12 }
+            }
+        });
+    }
+    
+    // LAST: Add the actual price spline if available (moved to front/top layer)
+    if (predictionData.actualPrice && predictionData.timestamps) {
+        traces.push({
+            x: predictionData.timestamps,
+            y: predictionData.actualPrice,
+            type: 'scattergl',
+            mode: 'lines',
+            name: 'Actual Price',
+            line: {
+                shape: 'spline',
+                color: 'rgba(247, 0, 255, 1)', // Red
+                width: 3
+            },
+            hoverinfo: 'text',
+            hovertext: predictionData.timestamps.map((time, i) => `
+                Actual Price<br>
+                Time: ${time.toLocaleTimeString()}<br>
+                Price: $${predictionData.actualPrice[i].toFixed(6)}`
+            ),
+            hoverlabel: {
+                bgcolor: '#0a192f',
+                bordercolor: 'rgba(255, 100, 100, 1)',
                 font: { family: 'Arial, sans-serif', size: 12 }
             }
         });
