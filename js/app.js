@@ -381,28 +381,6 @@ function initTensorToggle() {
     }
 }
 
-// Add this code to initialize WebWorkers for tensor calculations
-function initTensorWorkers() {
-  if (window.Worker) {
-    const workerCount = navigator.hardwareConcurrency || 4;
-    console.log(`Initializing ${workerCount} workers for tensor operations`);
-    
-    window.tensorWorkers = [];
-    for (let i = 0; i < workerCount; i++) {
-      const worker = new Worker('js/tensor-worker.js');
-      window.tensorWorkers.push(worker);
-    }
-    
-    return true;
-  }
-  
-  console.warn('WebWorkers not supported in this browser');
-  return false;
-}
-
-// Call this function during initialization
-initTensorWorkers();
-
 // Add this to your app.js to allow performance testing
 function addPerformanceTestButton() {
   const controlsDiv = document.querySelector('.controls');
